@@ -19,9 +19,6 @@
 
 -- ToDo:
 
-[ ]	rewrite config files to match new name
-[ ]	fix repos for ipblockd
-[.]	create tools directory, copy ipset_saver and document it
 
 [ ]	write an INSTALL.md
 	required packages
@@ -41,12 +38,14 @@
 [ ]	redo behaviour on 'NA' networks so that /32 and :/128 get added to the host set instead of the nets set
 [ ]	review RegEx matching in case we have more than one IP per line
 [ ]	generalize ASN lookups (try: geoip ...)
-[ ]	
+[ ]	document tools/*
 
 -- Done:
 
 - v1.0.1
 
+[x]	create tools directory, copy ipset_saver
+[x]	fix repos for ipblockd
 [x]	change name from ipset_blocker to ipblockd
 [x]	create share directory, move .service .defaults and .rsyslog.conf files
 [x]	add the lsipsets function as a script
@@ -57,3 +56,4 @@
 [x]	make pipe closer more secure (ie. add an UUID to trigger)
 [x]	create new ipsets with timeout set to maximum possible (2147483)
 [x]	properly reference GNU/GPL in the scripts
+[x]	rewrite config files to match new name
