@@ -60,7 +60,7 @@ If you don't want to use systemd or have a different init system (System V init 
 
 If you choose to use the provided systemd file as is, you may use the **ipblockd.defaults** file. On a debian system, this will live in ```/etc/defaults/```. On centOS and alike - I believe - this should be in ```/etc/sysconfig/```.
 
-Any other methos of setting these environmrnt variables is fine, too.
+Any other method of setting these environmient variables is fine, too.
 
 ### CAVEATS
 
