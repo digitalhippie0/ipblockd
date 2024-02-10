@@ -54,11 +54,11 @@ same applies for IPv6:
     # systemctl start ipblockd.service
 ```
 
-If you don't want to use systemd or have a different init system (System V init or upstart or ...) you may add an ampersand (```&```) to the ```main``` in the very last line of the script. This will detach it from the calling terminal having the same effect as running it with '&' on the command line.
+If you don't want to use systemd or have a different init system (System V init or upstart or ...) you may add an ampersand (```&```) to the ```loop``` call in the very last line of the script. This will detach it from the calling terminal having the same effect as running it with '&' on the command line.
 
 #### DEFAULTS FILE
 
-If you choose to use the provided systemd file as is, you may use the **ipblockd.defaults** file. On a debian system, this will live in ```/etc/defaults/```. On centOS and alike - I believe - this should be in ```/etc/sysconfig/```.
+If you choose to use the provided systemd file as is, you may use the **ipblockd.defaults** file. On a debian system, this will live in ```/etc/defaults/```. On centOS and alike - I believe - this should be in ```/etc/sysconfig/``` and you will probably want to review the .service file in this case, too.
 
 Any other method of setting these environmient variables is fine, too.
 

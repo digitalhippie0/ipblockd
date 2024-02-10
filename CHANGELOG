@@ -32,6 +32,7 @@
 	explain DEBUG options
 	include documentation from .defaults file
 
+[ ]	track down and fix that mysterious bug on IPv6 statistics collection if it ever reappears
 [ ]	add individual hosts count to stats output
 [ ]	logging: add log levels (info, warn, err) if possible
 [ ]	redo behaviour on 'NA' networks so that /32 and :/128 get added to the host set instead of the nets set
