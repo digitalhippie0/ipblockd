@@ -1,0 +1,182 @@
+#! /bin/bash 
+# code is like poetry, if you have to explain it, it is bad
+# vim: set ts=4 sw=4 :
+#
+# This file is part of ipblockd.
+# Copyright: (c) 2024 Henrik Harms
+# https://github.com/digitalhippie0/ipblockd
+#
+# ipblockd is free software: you can redistribute it and/or modify it under 
+# the terms of the GNU General Public License as published by the Free 
+# Software Foundation, either version 3 of the License, or (at your option) 
+# any later version.
+#
+# ipblockd is distributed in the hope that it will be useful, 
+# but WITHOUT ANY WARRANTY; without even the implied warranty of 
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General 
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along 
+# with ipblockd. If not, see <https://www.gnu.org/licenses/>. 
+
+IPSET_BASE=${IPSET_BASE=ipblockd}
+BLACKLIST=${BLACKLIST=CN|RU|BR|IN|IQ|TW|DO|KR|EG|HK|SG|BD|VN|ID|DM|KE|PK|TN|NG|AG|IR|TJ|UA|LA|TR|AE|CA|KZ|US}
+WHITELIST=${WHITELIST=AT|DE}
+PIPE=${PIPE=/var/spool/rsyslog/ipblockd}
+IPSET_BIN=${IPSET_BIN=/usr/sbin/ipset}
+LOGGER_BIN=${LOGGER_BIN=/usr/bin/logger}
+BC_BIN=${BC_BIN=/usr/bin/bc}
+TIMEOUT=${TIMEOUT=2073600}
+RESETSTATS=${RESETSTATS=off}
+declare -i DEBUG=${DEBUG=0}
+
+umask 0077
+MAJOR='1'; MINOR='0'; REVISION='1'
+P_UUID=$( cat /proc/sys/kernel/random/uuid)
+IFS='
+'
+
+function statistics {
+	declare -i VERSION=$( echo $BASH_VERSION | cut -d'.' -f1)
+	if [ ${VERSION} -ge 4 ]; then
+		echo "statistics dump triggered"
+		echo "- blocking stats:"
+		RAWSTATS=$( ${IPSET_BIN} save ${IPSET_BASE}-nets | perl -pne 's/.*?\/(\d{1,2}).*\((..)\)"$/$1 $2/' | grep -v "${IPSET_BASE}" | sort -k2 | uniq -c)
+		declare -i TOTALHOSTS=0
+		declare -i THE_INTERNET=$(( 2**32 ))
+		declare -A STATISTICS
+		for LINE in ${RAWSTATS}; do
+			declare -i COUNT=$( echo ${LINE} | awk '{print $1}')
+			declare -i MASK=$( echo ${LINE} | awk '{print $2}')
+			CC=$( echo ${LINE} | awk '{print $3}')
+			declare -i HOST_COUNT=$(( ${COUNT} * ( 2 ** ( 32 - ${MASK} )) ))
+			STATISTICS[${CC}]=$(( ${STATISTICS[${CC}]} + ${HOST_COUNT} ))
+			TOTALHOSTS=$(( ${TOTALHOSTS} + ${HOST_COUNT} ))
+		done
+		for COUNTRY in $( echo ${!STATISTICS[@]} | tr ' ' '\n' | sort); do
+			PERCENTAGE=$( printf '%3.2f' $(echo "scale=2;( ${STATISTICS[${COUNTRY}]} * 100 ) / ${TOTALHOSTS}" | ${BC_BIN} ))
+			echo -n "- blocking"
+			echo -n $( printf '%11d' ${STATISTICS[${COUNTRY}]})
+			echo -n " ("
+			echo -n $( printf '%5s' ${PERCENTAGE})
+			echo "%) hosts from ${COUNTRY}"
+		done
+		PERCENTAGE=$( printf '%3.2f' $(echo "scale=2;( ${TOTALHOSTS} * 100 ) / ${THE_INTERNET}" | ${BC_BIN} ))
+		echo "- these are ${TOTALHOSTS} hosts/IPs which represent ${PERCENTAGE}% of the IPv4 internet"
+		echo "- success stats:"
+		declare -i TOTALPACKETS=0
+		unset STATISTICS; declare -A STATISTICS
+		for NETS in '' '-nets'; do
+			for IP6 in '' '-ipv6'; do
+				TOTALBLOCKS=$( ${IPSET_BIN} save ${IPSET_BASE}${NETS}${IP6} | grep "packets" | grep -v "packets 0")
+				for LINE in ${TOTALBLOCKS}; do
+					NET_OR_IP=$( echo ${LINE} | cut -d' ' -f3)
+					TIMEOUT=$( echo ${LINE} | cut -d' ' -f5)
+					PACKETS=$( echo ${LINE} | cut -d' ' -f7)
+					COMMENT=$( echo ${LINE} | cut -d'"' -f2)
+					CC=$( echo ${LINE} | perl -pne 's/.*\((.*)?\)"$/$1/')
+					STATISTICS[${CC}]=$(( ${STATISTICS[${CC}]} + ${PACKETS} ))
+					TOTALPACKETS=$(( ${TOTALPACKETS} + ${PACKETS} ))
+					if [ ! "${RESETSTATS}" == "off" ]; then
+						${IPSET_BIN} --exist add ${IPSET_BASE}${NETS}${IP6} ${NET_OR_IP} timeout ${TIMEOUT} packets 0 bytes 0 comment "${COMMENT}"
+					fi
+				done
+			done
+		done
+		for COUNTRY in $( echo ${!STATISTICS[@]} | tr ' ' '\n' | sort); do
+			PERCENTAGE=$( printf '%3.2f' $(echo "scale=2;( ${STATISTICS[${COUNTRY}]} * 100 ) / ${TOTALPACKETS}" | ${BC_BIN} ))
+			echo -n "- counted "
+			echo -n $( printf '%11d' ${STATISTICS[${COUNTRY}]})
+			echo -n " hits ("
+			echo -n $( printf '%5s' ${PERCENTAGE})
+			echo "%) from ${COUNTRY}"
+		done
+		echo "- in total there have been ${TOTALPACKETS} hits to the ipsets"
+		if [ ! "${RESETSTATS}" == "off" ]; then
+			echo "- hit statistics have been reset"
+		fi
+	else
+		echo "statistics unavailable. Upgrade to bash version 4 or above"
+	fi
+}
+
+function setup {
+	trap 'echo "caught exit signal"; exit 0' EXIT 
+	trap 'echo "CLOSE_PIPE! ${P_UUID}" > ${PIPE}' HUP
+	trap 'statistics; echo "resuming normal operation"' USR1
+	if [ ${DEBUG} -gt 2 ]; then set -x; fi
+	if [ ${DEBUG} -lt 2 ]; then
+		exec 1> >( ${LOGGER_BIN} -p "syslog.info" -t $(basename $0)) 2>&1
+	fi
+
+	sleep 1 
+	echo "ipblockd, v${MAJOR}.${MINOR}.${REVISION} starting up"
+	echo 'make sure, we have our ipsets ready'
+	IPSETS_EXIST=$( ${IPSET_BIN} list | grep ${IPSET_BASE} | grep -E "^create " )
+	for NETS in '' '-nets'; do
+		for IP6 in '' '-ipv6'; do
+			if ! ${IPSET_BIN} list "${IPSET_BASE}${NETS}${IP6}" >/dev/null 2>&1; then
+				if [ "${NETS}" == "-nets" ]; then TYPE='hash:net'; else TYPE='hash:ip'; fi
+				if [ "${IP6}" == "-ipv6" ]; then FAMILY='inet6'; else FAMILY='inet'; fi
+				echo "ipset create ${IPSET_BASE}${NETS}${IP6} ${TYPE} family ${FAMILY} comment timeout 2147483 counters"
+				${IPSET_BIN} create ${IPSET_BASE}${NETS}${IP6} ${TYPE} family ${FAMILY} comment timeout 2147483 counters
+			fi
+		done
+	done
+}
+
+function loop {
+	while /bin/true; do
+		echo "open listener on ${PIPE}"
+		while read LINE; do
+			if [ "${LINE}" == "CLOSE_PIPE! ${P_UUID}" ]; then
+				echo "caught hangup. closing pipe"
+				break
+			else
+				if [ ${DEBUG} -ge 2 ]; then UUID='['; UUID+=$( cat /proc/sys/kernel/random/uuid);UUID+='] '; else UUID=''; fi
+				TIME=$( /bin/date "+%s")
+				RAWIPAD=$( echo ${LINE} | perl -ne \
+					'	my $line = $_; chomp $line;
+						use Regexp::IPv4 qw($IPv4_re); $line =~ s/.*?($IPv4_re).*/$1/ and print( "ipv4 $line");
+						use Regexp::IPv6 qw($IPv6_re); $line =~ s/.*?($IPv6_re).*/$1/ and print( "ipv6 $line");
+					')
+				if [ "${RAWIPAD}" == "" ]; then
+					echo "${UUID}parse error: ${LINE}"
+				else
+					IPAD=$( echo ${RAWIPAD} | cut -d' ' -f2)
+					IP6=$( if echo ${RAWIPAD} | cut -d' ' -f1 | grep -q 'ipv6'; then echo '-ipv6'; else echo ''; fi)
+
+					if ${IPSET_BIN} -q test ${IPSET_BASE}${IP6} ${IPAD} || ${IPSET_BIN} -q test ${IPSET_BASE}-nets${IP6} ${IPAD}; then
+						if [ ${DEBUG} -ge 1 ]; then echo "${UUID}${IPSET_BIN##*/} -q test ${IPSET_BASE}(-nets)${IP6} ${IPAD} <- this exists"; fi
+					else
+						ASN=$( /usr/bin/whois -h whois.cymru.com " -v ${IPAD}" | tail -1)
+						ASN_COUNTRY=$( echo ${ASN} | awk '{print $7}')
+						ASN_COMMENT=$( echo ${ASN} | awk '{print $13}')
+						ASN_NET=$( echo ${ASN} | awk '{print $5}')
+
+						if echo ${ASN_COUNTRY} | grep -qE ${WHITELIST}; then
+							echo "${UUID}IP ${IPAD} (${ASN_COMMENT} (${ASN_COUNTRY})) is whitelisted."
+						else
+							if echo ${ASN_COUNTRY} | grep -qE ${BLACKLIST}; then
+								if [ "${ASN_NET}" == "NA" ]; then
+									if [ "${IP6}" != '' ]; then ASN_NET="${IPAD}/128"; else ASN_NET="${IPAD}/32"; fi
+									echo "${UUID}could not find an ASN for ${IPAD} (${ASN_COUNTRY}), adding it as ${ASN_NET}"
+								fi
+								echo "${UUID}${IPSET_BIN##*/} add ${IPSET_BASE}-nets${IP6} ${ASN_NET} timeout ${TIMEOUT} comment \"@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})\""
+								${IPSET_BIN} add ${IPSET_BASE}-nets${IP6} --exist ${ASN_NET} timeout ${TIMEOUT} comment "@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})"
+							else
+								echo "${UUID}${IPSET_BIN##*/} add ${IPSET_BASE}${IP6} ${IPAD} timeout ${TIMEOUT} comment \"@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})\""
+								${IPSET_BIN} add ${IPSET_BASE}${IP6} --exist ${IPAD} timeout ${TIMEOUT} comment "@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})"
+							fi
+						fi
+					fi
+				fi
+				sleep 1
+			fi
+		done <${PIPE}
+		echo 'pipe closed. re-opening'
+	done
+}
+
+setup
+loop

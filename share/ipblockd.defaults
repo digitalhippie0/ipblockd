@@ -1,0 +1,62 @@
+# default environment for ipblockd.service
+#
+# This file is part of ipblockd.
+# Copyright: (c) 2024 Henrik Harms
+# https://github.com/digitalhippie0/ipblockd
+#
+# ipblockd is free software: you can redistribute it and/or modify it under 
+# the terms of the GNU General Public License as published by the Free 
+# Software Foundation, either version 3 of the License, or (at your option) 
+# any later version.
+#
+# ipblockd is distributed in the hope that it will be useful, 
+# but WITHOUT ANY WARRANTY; without even the implied warranty of 
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General 
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along 
+# with ipblockd. If not, see <https://www.gnu.org/licenses/>. 
+
+# the name base for our ipsets, can be any name ipset allows us to use
+IPSET_BASE='ipblockd'
+
+# these is a list of countries which we choose to blacklist. This makes ipblockd look up the ASN (netblock) 
+# and immediately block the entire subnet instead of just the single IP. If the lookup for an ASN fails, it will 
+# add a /32 "net" to the list, thus only blocking the singular IP anyway.
+# See https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes for a list of ISO country codes
+# Note that I do actually treat US and Canada as 'evil'. Quite some attacs originate from there. Treat IT security
+# seriously, do not use unsafe OS guys! 
+BLACKLIST='CN|RU|BR|IN|IQ|TW|DO|KR|EG|HK|SG|BD|VN|ID|DM|KE|PK|TN|NG|AG|IR|TJ|UA|LA|TR|AE|GM|GQ|MX|TH|MY|CA|KZ|US'
+
+# Countries for which never any blocking is done (usually your users home countries)
+WHITELIST='AT|DE'
+
+# The pipe used in communication with your syslog daemon. Can be rsyslog or syslog-ng or anything else.
+# ipblockd will read from this pipe but never write to it. If the pipe gets closed (^D) it will 
+# reopen the listener and log the event.
+PIPE='/var/spool/rsyslog/ipblockd'
+
+# the true locations of your ipset and logger binaries, these might differ for other distributions
+# if you use bash version 4 or above, you can dump some statistics by issuing a HUP or USR1 signal
+# you need the gnu bc binary form https://www.gnu.org/software/bc/ for this to work
+IPSET_BIN='/usr/sbin/ipset'
+LOGGER_BIN='/usr/bin/logger'
+BC_BIN='/usr/bin/bc'
+
+# the debug level, expressed as an integer.
+#	0 - regular shortened messages to the syslog
+#	1 - slightly more verbose msgs to syslog (will also log 'exists' messages)
+#	2 - verbose logging to the console (no syslog spawn), each input line is annotated with an UUID
+#	3++ very verbose logging to the console. will 'set -x' so you can really see what happens
+# you might want to debug like 
+# DEBUG=2 TIMEOUT='600' /some/path/ipblockd
+DEBUG=0
+
+# timeout for new entires, the default is 24 days aka 2073600 secs
+TIMEOUT='2073600'
+
+# reset hit statistics by reinserting the rules with zero counters on statistics dump? 
+# must be 'off' to NOT reset them. defauls to 'off' but should be 'on' for production systems
+# essentially you get a counter when 'off'
+#                 and a gauge when 'on'
+RESETSTATS='on'

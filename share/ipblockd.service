@@ -1,0 +1,32 @@
+# ipblockd.service file for systemd
+#
+# This file is part of ipblockd.
+# Copyright: (c) 2024 Henrik Harms
+# https://github.com/digitalhippie0/ipblockd
+#
+# ipblockd is free software: you can redistribute it and/or modify it under 
+# the terms of the GNU General Public License as published by the Free 
+# Software Foundation, either version 3 of the License, or (at your option) 
+# any later version.
+#
+# ipblockd is distributed in the hope that it will be useful, 
+# but WITHOUT ANY WARRANTY; without even the implied warranty of 
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General 
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along 
+# with ipblockd. If not, see <https://www.gnu.org/licenses/>. 
+
+[Unit]
+Description=ip and network blocking based on syslog rules
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/sbin/ipblockd
+RestartSec=10
+Restart=always
+
+[Install]
+WantedBy=default.target
+

@@ -1,0 +1,59 @@
+# changelog for ipblockd 
+#
+# This file is part of ipblockd.
+# Copyright: (c) 2024 Henrik Harms
+# https://github.com/digitalhippie0/ipblockd
+#
+# ipblockd is free software: you can redistribute it and/or modify it under 
+# the terms of the GNU General Public License as published by the Free 
+# Software Foundation, either version 3 of the License, or (at your option) 
+# any later version.
+#
+# ipblockd is distributed in the hope that it will be useful, 
+# but WITHOUT ANY WARRANTY; without even the implied warranty of 
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General 
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along 
+# with ipblockd. If not, see <https://www.gnu.org/licenses/>. 
+
+-- ToDo:
+
+[ ]	rewrite config files to match new name
+[ ]	fix repos for ipblockd
+[.]	create tools directory, copy ipset_saver and document it
+
+[ ]	write an INSTALL.md
+	required packages
+	bash version 4
+	debian vs centOS
+	document mkfifo
+	link to rsylog and syslog-ng documentation
+	
+[ ]	rewrite README.md
+	document SIGnals (& crontab)
+	document run options
+	explain DEBUG options
+	include documentation from .defaults file
+
+[ ]	add individual hosts count to stats output
+[ ]	logging: add log levels (info, warn, err) if possible
+[ ]	redo behaviour on 'NA' networks so that /32 and :/128 get added to the host set instead of the nets set
+[ ]	review RegEx matching in case we have more than one IP per line
+[ ]	generalize ASN lookups (try: geoip ...)
+[ ]	
+
+-- Done:
+
+- v1.0.1
+
+[x]	change name from ipset_blocker to ipblockd
+[x]	create share directory, move .service .defaults and .rsyslog.conf files
+[x]	add the lsipsets function as a script
+[x]	fix typo in stats output
+[x]	change comments to not include ".. (IPSET_BASE) .."
+	change comments to start with '@TIMESTAMP' rather than '#TIMESTAMP' 
+[x]	logging: do not start with '# '
+[x]	make pipe closer more secure (ie. add an UUID to trigger)
+[x]	create new ipsets with timeout set to maximum possible (2147483)
+[x]	properly reference GNU/GPL in the scripts
