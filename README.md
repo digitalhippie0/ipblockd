@@ -4,6 +4,7 @@
 ### SYNOPSIS
 
 ENVAR1=foo ENVVAR2=moo ipblockd
+
 *there are no available options, everything is dictated by the environment, see ENVIRONMENT VARIABLES below*
 
 ### DESCRIPTION
@@ -19,6 +20,7 @@ So I wrote a quick hack to stop this and kept refinig it. Unlike ```fail2ban``` 
 All variables are optional. ipblockd has useable defaults for all of them. You *will* want to review the _BIN variables though and adapt them to match your system.
 For a more complete documentation, see *ipblockd.defaults* or the *INSTALL.md* files.
 
+```
 IPSET_BASE
 BLACKLIST
 WHITELIST
@@ -29,19 +31,24 @@ BC_BIN
 DEBUG
 TIMEOUT
 RESETSTATS
+```
 
 ### FILES
 
+```
 */etc/systemd/system/ipblockd.service*
 */etc/defaults/ipblockd*
 */etc/rsyslog.d/ipblockd.rsyslog.conf*
 */usr/local/sbin/ipblockd*
 */var/spool/rsyslog/ipblockd* (named pipe)
+```
 
 ### SIGNALS
 
 Sending a SIGUSR1 to the service will trigger a statistics dump which will appear in the log. Depending on the variable RESETSTATS statistics will be reset or not. Who may have thought ...
+
 Sending a SIGHUP will terminate the main read loop and thus trigger a pipe reopening - just in case
+
 Sending any of SIGINT, QUIT, TERM and so on will hopefully terminate the program ;)
 
 ### KNOWN BUGS
