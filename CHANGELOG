@@ -33,14 +33,21 @@
 	include documentation from .defaults file
 
 [ ]	track down and fix that mysterious bug on IPv6 statistics collection if it ever reappears
-[ ]	add individual hosts count to stats output
+[ ]	add "never" networks (eg. RFC private, localhost & my own), log events
+[ ]	limit netmasks to be >=8 for safety, log events
 [ ]	logging: add log levels (info, warn, err) if possible
 [ ]	redo behaviour on 'NA' networks so that /32 and :/128 get added to the host set instead of the nets set
-[ ]	review RegEx matching in case we have more than one IP per line
 [ ]	generalize ASN lookups (try: geoip ...)
 [ ]	document tools/*
 
 -- Done:
+
+- v1.0.2ß
+
+[x]	add individual hosts count to stats output
+[x]	RegEx matching should now ignore these pesky DNS records containing reversed IP addresses
+[x]	review RegEx matching in case we have more than one IP per line
+[x]	fix service file (ENV has been lost)
 
 - v1.0.1
 
@@ -51,7 +58,7 @@
 [x]	add the lsipsets function as a script
 [x]	fix typo in stats output
 [x]	change comments to not include ".. (IPSET_BASE) .."
-	change comments to start with '@TIMESTAMP' rather than '#TIMESTAMP' 
+[x]	change comments to start with '@TIMESTAMP' rather than '#TIMESTAMP' 
 [x]	logging: do not start with '# '
 [x]	make pipe closer more secure (ie. add an UUID to trigger)
 [x]	create new ipsets with timeout set to maximum possible (2147483)

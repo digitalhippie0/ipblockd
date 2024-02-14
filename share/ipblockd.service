@@ -23,6 +23,7 @@ Description=ip and network blocking based on syslog rules
 [Service]
 Type=simple
 User=root
+EnvironmentFile=/etc/default/ipblockd
 ExecStart=/usr/local/sbin/ipblockd
 RestartSec=10
 Restart=always

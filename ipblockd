@@ -31,7 +31,7 @@ RESETSTATS=${RESETSTATS=off}
 declare -i DEBUG=${DEBUG=0}
 
 umask 0077
-MAJOR='1'; MINOR='0'; REVISION='1'
+MAJOR='1'; MINOR='0'; REVISION='2ß'
 P_UUID=$( cat /proc/sys/kernel/random/uuid)
 IFS='
 '
@@ -41,7 +41,8 @@ function statistics {
 	if [ ${VERSION} -ge 4 ]; then
 		echo "statistics dump triggered"
 		echo "- blocking stats:"
-		RAWSTATS=$( ${IPSET_BIN} save ${IPSET_BASE}-nets | perl -pne 's/.*?\/(\d{1,2}).*\((..)\)"$/$1 $2/' | grep -v "${IPSET_BASE}" | sort -k2 | uniq -c)
+		RAWSTATS=$(	${IPSET_BIN} save ${IPSET_BASE}-nets | perl -pne 's/.*?\/(\d{1,2}).*\((..)\)"$/$1 $2/' | grep -v "${IPSET_BASE}" | sort -k2 | uniq -c
+					${IPSET_BIN} save ${IPSET_BASE} | perl -pne 's/.*?\((..)\)"$/1 32 XYZ/' | grep -v "${IPSET_BASE}" )
 		declare -i TOTALHOSTS=0
 		declare -i THE_INTERNET=$(( 2**32 ))
 		declare -A STATISTICS
@@ -59,6 +60,7 @@ function statistics {
 			echo -n $( printf '%11d' ${STATISTICS[${COUNTRY}]})
 			echo -n " ("
 			echo -n $( printf '%5s' ${PERCENTAGE})
+			if [ "${COUNTRY}" == "XYZ" ]; then COUNTRY='various other countries'; fi
 			echo "%) hosts from ${COUNTRY}"
 		done
 		PERCENTAGE=$( printf '%3.2f' $(echo "scale=2;( ${TOTALHOSTS} * 100 ) / ${THE_INTERNET}" | ${BC_BIN} ))
@@ -71,14 +73,14 @@ function statistics {
 				TOTALBLOCKS=$( ${IPSET_BIN} save ${IPSET_BASE}${NETS}${IP6} | grep "packets" | grep -v "packets 0")
 				for LINE in ${TOTALBLOCKS}; do
 					NET_OR_IP=$( echo ${LINE} | cut -d' ' -f3)
-					TIMEOUT=$( echo ${LINE} | cut -d' ' -f5)
+					KEEPTIMEOUT=$( echo ${LINE} | cut -d' ' -f5)
 					PACKETS=$( echo ${LINE} | cut -d' ' -f7)
 					COMMENT=$( echo ${LINE} | cut -d'"' -f2)
 					CC=$( echo ${LINE} | perl -pne 's/.*\((.*)?\)"$/$1/')
 					STATISTICS[${CC}]=$(( ${STATISTICS[${CC}]} + ${PACKETS} ))
 					TOTALPACKETS=$(( ${TOTALPACKETS} + ${PACKETS} ))
 					if [ ! "${RESETSTATS}" == "off" ]; then
-						${IPSET_BIN} --exist add ${IPSET_BASE}${NETS}${IP6} ${NET_OR_IP} timeout ${TIMEOUT} packets 0 bytes 0 comment "${COMMENT}"
+						${IPSET_BIN} --exist add ${IPSET_BASE}${NETS}${IP6} ${NET_OR_IP} timeout ${KEEPTIMEOUT} packets 0 bytes 0 comment "${COMMENT}"
 					fi
 				done
 			done
@@ -111,7 +113,6 @@ function setup {
 
 	sleep 1 
 	echo "ipblockd, v${MAJOR}.${MINOR}.${REVISION} starting up"
-	echo 'make sure, we have our ipsets ready'
 	IPSETS_EXIST=$( ${IPSET_BIN} list | grep ${IPSET_BASE} | grep -E "^create " )
 	for NETS in '' '-nets'; do
 		for IP6 in '' '-ipv6'; do
@@ -137,9 +138,12 @@ function loop {
 				TIME=$( /bin/date "+%s")
 				RAWIPAD=$( echo ${LINE} | perl -ne \
 					'	my $line = $_; chomp $line;
-						use Regexp::IPv4 qw($IPv4_re); $line =~ s/.*?($IPv4_re).*/$1/ and print( "ipv4 $line");
-						use Regexp::IPv6 qw($IPv6_re); $line =~ s/.*?($IPv6_re).*/$1/ and print( "ipv6 $line");
-					')
+						use Regexp::IPv4 qw($IPv4_re); use Regexp::IPv6 qw($IPv6_re);
+						$line =~ s/.*?[\[ ]($IPv6_re)[\]: ](?!\.).*/$1/ and print( "ipv6 $line");
+						$line =~ s/.*?[\[ ]($IPv6_re)$/$1/ and print( "ipv6 $line");
+						$line =~ s/.*?[\[ ]($IPv4_re)[\]: ](?!\.).*/$1/ and print( "ipv4 $line");
+						$line =~ s/.*?[\[ ]($IPv4_re)$/$1/ and print( "ipv4 $line");
+					' | tail -1)
 				if [ "${RAWIPAD}" == "" ]; then
 					echo "${UUID}parse error: ${LINE}"
 				else
