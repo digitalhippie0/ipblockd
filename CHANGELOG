@@ -19,17 +19,7 @@
 
 -- ToDo:
 
-[ ]	write an INSTALL.md
-	required packages
-	bash version 4
-	debian vs centOS
-	document mkfifo
-	link to rsylog and syslog-ng documentation
-[ ]	rewrite README.md
-	document SIGnals (& crontab)
-	document run options
-	explain DEBUG options
-	include documentation from .defaults file
+[ ]	include documentation from .defaults file into README.md
 [ ]	document tools/*
 
 -- Wishlist:
@@ -44,6 +34,8 @@
 
 [x]	add "never" networks (eg. RFC private, localhost & my own), log events
 [x]	limit netmasks to be >=8 for safety, log events
+[x]	rewrite README.md
+[x]	write an INSTALL.md
 
 - v1.0.2ß
 
