@@ -31,7 +31,7 @@ RESETSTATS=${RESETSTATS=off}
 declare -i DEBUG=${DEBUG=0}
 
 umask 0077
-MAJOR='1'; MINOR='0'; REVISION='2ß'
+MAJOR='1'; MINOR='0'; REVISION='3'
 P_UUID=$( cat /proc/sys/kernel/random/uuid)
 IFS='
 '
@@ -122,6 +122,25 @@ function setup {
 				echo "ipset create ${IPSET_BASE}${NETS}${IP6} ${TYPE} family ${FAMILY} comment timeout 2147483 counters"
 				${IPSET_BIN} create ${IPSET_BASE}${NETS}${IP6} ${TYPE} family ${FAMILY} comment timeout 2147483 counters
 			fi
+			if ! ${IPSET_BIN} list "${IPSET_BASE}-excludes" >/dev/null 2>&1; then
+				echo "ipset create ${IPSET_BASE}-excludes hash:net family inet comment"
+				${IPSET_BIN} create ${IPSET_BASE}-excludes hash:net family inet comment
+				echo "pre-populate set \"${IPSET_BASE}-excludes\", make sure to add your own networks to these!"
+				${IPSET_BIN} add ${IPSET_BASE}-excludes 10.0.0.0/8 comment "RFC private IPv4 Class A"
+				${IPSET_BIN} add ${IPSET_BASE}-excludes 172.16.0.0/12 comment "RFC private IPv4 Class B"
+				${IPSET_BIN} add ${IPSET_BASE}-excludes 192.168.0.0/16 comment "RFC private IPv4 Class C"
+				${IPSET_BIN} add ${IPSET_BASE}-excludes 127.0.0.0/8 comment "IPv4 localhost"
+				${IPSET_BIN} add ${IPSET_BASE}-excludes 100.64.0.0/10 comment "IANA IPv4 carrier-grade NAT"
+				${IPSET_BIN} add ${IPSET_BASE}-excludes 169.254.0.0/16 comment "IPv4 link local (self assigned IPs)"
+			fi
+			if ! ${IPSET_BIN} list "${IPSET_BASE}-excludes-ipv6" >/dev/null 2>&1; then
+				echo "ipset create ${IPSET_BASE}-excludes-ipv6 hash:net family inet6 comment"
+				${IPSET_BIN} create ${IPSET_BASE}-excludes-ipv6 hash:net family inet6 comment
+				echo "pre-populate set \"${IPSET_BASE}-excludes-ipv6\", make sure to add your own networks to these!"
+				${IPSET_BIN} add ${IPSET_BASE}-excludes-ipv6 fd00::/8 comment "RFC private IPv6"
+				${IPSET_BIN} add ${IPSET_BASE}-excludes-ipv6 fe80::/10 comment "RFC IPv6 link local"
+				${IPSET_BIN} add ${IPSET_BASE}-excludes-ipv6 ::1/128 comment "IPv6 localhost"
+			fi
 		done
 	done
 }
@@ -152,14 +171,20 @@ function loop {
 
 					if ${IPSET_BIN} -q test ${IPSET_BASE}${IP6} ${IPAD} || ${IPSET_BIN} -q test ${IPSET_BASE}-nets${IP6} ${IPAD}; then
 						if [ ${DEBUG} -ge 1 ]; then echo "${UUID}${IPSET_BIN##*/} -q test ${IPSET_BASE}(-nets)${IP6} ${IPAD} <- this exists"; fi
+					elif ${IPSET_BIN} -q test ${IPSET_BASE}-excludes${IP6} ${IPAD}; then
+						echo "${UUID}${IPSET_BIN##*/} -q test ${IPSET_BASE}-excludes${IP6} ${IPAD} <- is an excluded IP address"
 					else
 						ASN=$( /usr/bin/whois -h whois.cymru.com " -v ${IPAD}" | tail -1)
 						ASN_COUNTRY=$( echo ${ASN} | awk '{print $7}')
 						ASN_COMMENT=$( echo ${ASN} | awk '{print $13}')
 						ASN_NET=$( echo ${ASN} | awk '{print $5}')
+						declare -i ASN_MASK=$( echo ${ASN_NET} | cut -d'/' -f2)
 
 						if echo ${ASN_COUNTRY} | grep -qE ${WHITELIST}; then
 							echo "${UUID}IP ${IPAD} (${ASN_COMMENT} (${ASN_COUNTRY})) is whitelisted."
+						elif [ ${ASN_MASK} -lt 8 ]; then
+							echo "${UUID}ASN \"${ASN_COMMENT} (${ASN_COUNTRY})\" ${ASN_NET} has a netmask less than 8. For safety reasons, we will not add such large blocks."
+							echo "${UUID}manually run '${IPSET_BIN} add ${IPSET_BASE}-nets${IP6} --exist ${ASN_NET} timeout ${TIMEOUT} comment \"@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})\"' to add it nevertheless." 
 						else
 							if echo ${ASN_COUNTRY} | grep -qE ${BLACKLIST}; then
 								if [ "${ASN_NET}" == "NA" ]; then

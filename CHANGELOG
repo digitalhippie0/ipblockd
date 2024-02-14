@@ -25,22 +25,25 @@
 	debian vs centOS
 	document mkfifo
 	link to rsylog and syslog-ng documentation
-	
 [ ]	rewrite README.md
 	document SIGnals (& crontab)
 	document run options
 	explain DEBUG options
 	include documentation from .defaults file
-
-[ ]	track down and fix that mysterious bug on IPv6 statistics collection if it ever reappears
-[ ]	add "never" networks (eg. RFC private, localhost & my own), log events
-[ ]	limit netmasks to be >=8 for safety, log events
-[ ]	logging: add log levels (info, warn, err) if possible
-[ ]	redo behaviour on 'NA' networks so that /32 and :/128 get added to the host set instead of the nets set
-[ ]	generalize ASN lookups (try: geoip ...)
 [ ]	document tools/*
 
+-- Wishlist:
+
+[ ]	track down and fix that mysterious bug on IPv6 statistics collection if it ever reappears
+[ ]	logging: add log levels (info, warn, err) if possible
+[ ]	generalize ASN lookups (try: geoip ...)
+
 -- Done:
+
+- v1.0.3
+
+[x]	add "never" networks (eg. RFC private, localhost & my own), log events
+[x]	limit netmasks to be >=8 for safety, log events
 
 - v1.0.2ß
 
