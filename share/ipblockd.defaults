@@ -26,7 +26,7 @@ IPSET_BASE='ipblockd'
 # See https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes for a list of ISO country codes
 # Note that I do actually treat US and Canada as 'evil'. Quite some attacs originate from there. Treat IT security
 # seriously, do not use unsafe OS guys! 
-BLACKLIST='CN|RU|BR|IN|IQ|TW|DO|KR|EG|HK|SG|BD|VN|ID|DM|KE|PK|TN|NG|AG|IR|TJ|UA|LA|TR|AE|GM|GQ|MX|TH|MY|CA|KZ|US'
+BLACKLIST='CN|RU|BR|IN|IQ|LY|PA|TW|DO|KR|EG|HK|SG|BD|VN|ID|DM|KE|PK|TN|NG|AG|AR|IR|TJ|UA|LA|TR|AE|GM|GQ|MX|TH|MY|CA|KZ|US'
 
 # Countries for which never any blocking is done (usually your users home countries)
 WHITELIST='AT|DE'
@@ -60,3 +60,9 @@ TIMEOUT='2073600'
 # essentially you get a counter when 'off'
 #                 and a gauge when 'on'
 RESETSTATS='on'
+
+# a file (preferably in /tmp wiht permissions rw----) where ipblockd can store volatile stats
+# defaults to /tmp/ipblockd.stats 
+STATSFILE=/tmp/ipblockd.stats
+
+# EOF

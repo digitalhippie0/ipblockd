@@ -21,6 +21,14 @@ Create a named pipe for *ipblockd* to listen on.
     $ sudo mkfifo /var/spool/rsyslog/ipblockd
 ```
 
+For safety reasons, you should check the permissions of this fifo, eg.
+
+```
+    $ sudo chmod 0600 /var/spool/rsyslog/ipblockd
+    $ sudo ls -l /var/spool/rsyslog/ipblockd
+    prw------- 1 root root 0 Feb 17 10:34 /var/spool/rsyslog/ipblockd
+```
+
 #### FIREWALL RULES
 
 You will have to create the ipsets first, in order to be able to create firewall rules based on them. *ipblockd* will create the default set for you, just run it once prior to configuring the firewall.
@@ -63,7 +71,7 @@ If you don't want to use systemd or have a different init system (System V init 
 
 If you choose to use the provided systemd file as is, you may use the **ipblockd.defaults** file. On a debian system, this will live in ```/etc/defaults/```. On centOS and alike - I believe - this should be in ```/etc/sysconfig/``` and you will probably want to review the .service file in this case, too.
 
-Any other method of setting these environmient variables is fine, too.
+Any other method of setting these environmient variables is fine, too. See the file itself for a comprehensive documentation of each variable.
 
 ### CAVEATS
 
@@ -107,13 +115,13 @@ add a few lines to your crontab to automate this:
     [... add this line to dump statistics at 23:55 every day:]
     55 23 * * *	/usr/bin/killall -USR1 ipblockd
     [... add something like this to have cron send you a daily summary at 00:05:]
-    5 0 * * *	/bin/bash -c 'grep ipblockd /var/log/syslog.1 | cut -d":" -f4-'
+    5 0 * * *	/usr/bin/journalctl -S "-24h" -u ipblockd.service | cut -d' ' -f6-
     [... save]
 ```
 
 see what it's doing at runtime:
 ```
-    $ sudo journalctl -f -u ipblockd
+    $ sudo journalctl -f -u ipblockd.service
 ```
 
 ### COPYRIGHT

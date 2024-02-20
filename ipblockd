@@ -27,20 +27,33 @@ IPSET_BIN=${IPSET_BIN=/usr/sbin/ipset}
 LOGGER_BIN=${LOGGER_BIN=/usr/bin/logger}
 BC_BIN=${BC_BIN=/usr/bin/bc}
 TIMEOUT=${TIMEOUT=2073600}
+STATSFILE=${STATSFILE=/tmp/ipblockd.stats}
 RESETSTATS=${RESETSTATS=off}
 declare -i DEBUG=${DEBUG=0}
 
 umask 0077
-MAJOR='1'; MINOR='0'; REVISION='3'
+MAJOR='1'; MINOR='0'; REVISION='4'
 P_UUID=$( cat /proc/sys/kernel/random/uuid)
 IFS='
 '
+
+function dump_stats {
+	cat <<-_ > ${STATSFILE}
+		NEW_HOST_COUNT=${NEW_HOST_COUNT}
+		INSERT_COUNT=${INSERT_COUNT}
+		EXCLUDE_COUNT=${EXCLUDE_COUNT}
+		SAFETY_COUNT=${SAFETY_COUNT}
+		WHITELIST_COUNT=${WHITELIST_COUNT}
+		PARSER_ERROR_COUNT=${PARSER_ERROR_COUNT}
+		EXISTS_COUNT=${EXISTS_COUNT}
+_
+}
 
 function statistics {
 	declare -i VERSION=$( echo $BASH_VERSION | cut -d'.' -f1)
 	if [ ${VERSION} -ge 4 ]; then
 		echo "statistics dump triggered"
-		echo "- blocking stats:"
+		echo "- blocking stats:" >&6
 		RAWSTATS=$(	${IPSET_BIN} save ${IPSET_BASE}-nets | perl -pne 's/.*?\/(\d{1,2}).*\((..)\)"$/$1 $2/' | grep -v "${IPSET_BASE}" | sort -k2 | uniq -c
 					${IPSET_BIN} save ${IPSET_BASE} | perl -pne 's/.*?\((..)\)"$/1 32 XYZ/' | grep -v "${IPSET_BASE}" )
 		declare -i TOTALHOSTS=0
@@ -56,16 +69,16 @@ function statistics {
 		done
 		for COUNTRY in $( echo ${!STATISTICS[@]} | tr ' ' '\n' | sort); do
 			PERCENTAGE=$( printf '%3.2f' $(echo "scale=2;( ${STATISTICS[${COUNTRY}]} * 100 ) / ${TOTALHOSTS}" | ${BC_BIN} ))
-			echo -n "- blocking"
-			echo -n $( printf '%11d' ${STATISTICS[${COUNTRY}]})
-			echo -n " ("
-			echo -n $( printf '%5s' ${PERCENTAGE})
+			echo -n "- blocking" >&6
+			echo -n $( printf '%11d' ${STATISTICS[${COUNTRY}]}) >&6
+			echo -n " (" >&6
+			echo -n $( printf '%5s' ${PERCENTAGE}) >&6
 			if [ "${COUNTRY}" == "XYZ" ]; then COUNTRY='various other countries'; fi
-			echo "%) hosts from ${COUNTRY}"
+			echo "%) hosts from ${COUNTRY}" >&6
 		done
 		PERCENTAGE=$( printf '%3.2f' $(echo "scale=2;( ${TOTALHOSTS} * 100 ) / ${THE_INTERNET}" | ${BC_BIN} ))
 		echo "- these are ${TOTALHOSTS} hosts/IPs which represent ${PERCENTAGE}% of the IPv4 internet"
-		echo "- success stats:"
+		echo "- success stats:" >&6
 		declare -i TOTALPACKETS=0
 		unset STATISTICS; declare -A STATISTICS
 		for NETS in '' '-nets'; do
@@ -87,28 +100,55 @@ function statistics {
 		done
 		for COUNTRY in $( echo ${!STATISTICS[@]} | tr ' ' '\n' | sort); do
 			PERCENTAGE=$( printf '%3.2f' $(echo "scale=2;( ${STATISTICS[${COUNTRY}]} * 100 ) / ${TOTALPACKETS}" | ${BC_BIN} ))
-			echo -n "- counted "
-			echo -n $( printf '%11d' ${STATISTICS[${COUNTRY}]})
-			echo -n " hits ("
-			echo -n $( printf '%5s' ${PERCENTAGE})
-			echo "%) from ${COUNTRY}"
+			echo -n "- counted " >&6
+			echo -n $( printf '%11d' ${STATISTICS[${COUNTRY}]}) >&6
+			echo -n " hits (" >&6
+			echo -n $( printf '%5s' ${PERCENTAGE}) >&6
+			echo "%) from ${COUNTRY}" >&6
 		done
 		echo "- in total there have been ${TOTALPACKETS} hits to the ipsets"
+		echo "- activity stats:" >&6
+		echo "- there have been ${INSERT_COUNT} insertions covering ${NEW_HOST_COUNT} additional hosts" >&6
+		if [ ${EXCLUDE_COUNT} != 0 ]; then echo "- ${EXCLUDE_COUNT} hosts were not added because of a Net/IP exclude" >&6; fi
+		if [ ${SAFETY_COUNT} != 0 ]; then echo "- ${SAFETY_COUNT} nets were not added because of a excessive netmask" >&6; fi
+		if [ ${WHITELIST_COUNT} != 0 ]; then echo "- ${WHITELIST_COUNT} hosts were not added because they are whitelisted by country" >&6; fi
+		if [ ${EXISTS_COUNT} != 0 ]; then echo "- ${EXISTS_COUNT} hosts had been listed before, so they were omitted" >&6; fi
+		if [ ${PARSER_ERROR_COUNT} != 0 ]; then echo "- ${PARSER_ERROR_COUNT} lines did not match to an IP address (parser errors)" >&6; fi
+		sleep 0.5
 		if [ ! "${RESETSTATS}" == "off" ]; then
-			echo "- hit statistics have been reset"
+			echo "- hit and count statistics have been reset"
+			NEW_HOST_COUNT=0
+			INSERT_COUNT=0
+			EXCLUDE_COUNT=0
+			SAFETY_COUNT=0
+			WHITELIST_COUNT=0
+			PARSER_ERROR_COUNT=0
+			EXISTS_COUNT=0
+			dump_stats
 		fi
 	else
-		echo "statistics unavailable. Upgrade to bash version 4 or above"
+		echo "statistics unavailable. Upgrade to bash version 4 or above" >&5
 	fi
 }
 
 function setup {
-	trap 'echo "caught exit signal"; exit 0' EXIT 
+	trap 'echo "caught exit signal"; dump_stats; exit 0' EXIT TERM
 	trap 'echo "CLOSE_PIPE! ${P_UUID}" > ${PIPE}' HUP
-	trap 'statistics; echo "resuming normal operation"' USR1
-	if [ ${DEBUG} -gt 2 ]; then set -x; fi
+	trap 'statistics; echo "resuming normal operation" >&4' USR1
+	if [ ${DEBUG} -gt 1 ]; then 
+		exec 4>&1
+		exec 5>&1
+		exec 6>&1
+	fi
+	if [ ${DEBUG} -gt 2 ]; then 
+		set -x; 
+	fi
 	if [ ${DEBUG} -lt 2 ]; then
-		exec 1> >( ${LOGGER_BIN} -p "syslog.info" -t $(basename $0)) 2>&1
+		exec 1> >( ${LOGGER_BIN} -p "syslog.info" -t $(basename $0)) 
+		exec 4> >( ${LOGGER_BIN} -p "syslog.warn" -t $(basename $0))
+		exec 5> >( ${LOGGER_BIN} -p "syslog.error" -t $(basename $0))
+		exec 6> >( ${LOGGER_BIN} -p "syslog.debug" -t $(basename $0))
+		exec 2>&5
 	fi
 
 	sleep 1 
@@ -119,13 +159,13 @@ function setup {
 			if ! ${IPSET_BIN} list "${IPSET_BASE}${NETS}${IP6}" >/dev/null 2>&1; then
 				if [ "${NETS}" == "-nets" ]; then TYPE='hash:net'; else TYPE='hash:ip'; fi
 				if [ "${IP6}" == "-ipv6" ]; then FAMILY='inet6'; else FAMILY='inet'; fi
-				echo "ipset create ${IPSET_BASE}${NETS}${IP6} ${TYPE} family ${FAMILY} comment timeout 2147483 counters"
+				echo "ipset create ${IPSET_BASE}${NETS}${IP6} ${TYPE} family ${FAMILY} comment timeout 2147483 counters" >&6
 				${IPSET_BIN} create ${IPSET_BASE}${NETS}${IP6} ${TYPE} family ${FAMILY} comment timeout 2147483 counters
 			fi
 			if ! ${IPSET_BIN} list "${IPSET_BASE}-excludes" >/dev/null 2>&1; then
-				echo "ipset create ${IPSET_BASE}-excludes hash:net family inet comment"
+				echo "ipset create ${IPSET_BASE}-excludes hash:net family inet comment" >&6
 				${IPSET_BIN} create ${IPSET_BASE}-excludes hash:net family inet comment
-				echo "pre-populate set \"${IPSET_BASE}-excludes\", make sure to add your own networks to these!"
+				echo "pre-populate set \"${IPSET_BASE}-excludes\", make sure to add your own networks to these!" >&4
 				${IPSET_BIN} add ${IPSET_BASE}-excludes 10.0.0.0/8 comment "RFC private IPv4 Class A"
 				${IPSET_BIN} add ${IPSET_BASE}-excludes 172.16.0.0/12 comment "RFC private IPv4 Class B"
 				${IPSET_BIN} add ${IPSET_BASE}-excludes 192.168.0.0/16 comment "RFC private IPv4 Class C"
@@ -134,23 +174,24 @@ function setup {
 				${IPSET_BIN} add ${IPSET_BASE}-excludes 169.254.0.0/16 comment "IPv4 link local (self assigned IPs)"
 			fi
 			if ! ${IPSET_BIN} list "${IPSET_BASE}-excludes-ipv6" >/dev/null 2>&1; then
-				echo "ipset create ${IPSET_BASE}-excludes-ipv6 hash:net family inet6 comment"
+				echo "ipset create ${IPSET_BASE}-excludes-ipv6 hash:net family inet6 comment" >&6
 				${IPSET_BIN} create ${IPSET_BASE}-excludes-ipv6 hash:net family inet6 comment
-				echo "pre-populate set \"${IPSET_BASE}-excludes-ipv6\", make sure to add your own networks to these!"
+				echo "pre-populate set \"${IPSET_BASE}-excludes-ipv6\", make sure to add your own networks to these!" >&4
 				${IPSET_BIN} add ${IPSET_BASE}-excludes-ipv6 fd00::/8 comment "RFC private IPv6"
 				${IPSET_BIN} add ${IPSET_BASE}-excludes-ipv6 fe80::/10 comment "RFC IPv6 link local"
 				${IPSET_BIN} add ${IPSET_BASE}-excludes-ipv6 ::1/128 comment "IPv6 localhost"
 			fi
 		done
 	done
+
 }
 
 function loop {
 	while /bin/true; do
-		echo "open listener on ${PIPE}"
+		echo "open listener on ${PIPE}" >&6
 		while read LINE; do
 			if [ "${LINE}" == "CLOSE_PIPE! ${P_UUID}" ]; then
-				echo "caught hangup. closing pipe"
+				echo "caught hangup. closing pipe" >&5
 				break
 			else
 				if [ ${DEBUG} -ge 2 ]; then UUID='['; UUID+=$( cat /proc/sys/kernel/random/uuid);UUID+='] '; else UUID=''; fi
@@ -164,15 +205,18 @@ function loop {
 						$line =~ s/.*?[\[ ]($IPv4_re)$/$1/ and print( "ipv4 $line");
 					' | tail -1)
 				if [ "${RAWIPAD}" == "" ]; then
-					echo "${UUID}parse error: ${LINE}"
+					echo "${UUID}parse error: ${LINE}" >&5
+					PARSER_ERROR_COUNT+=1
 				else
 					IPAD=$( echo ${RAWIPAD} | cut -d' ' -f2)
 					IP6=$( if echo ${RAWIPAD} | cut -d' ' -f1 | grep -q 'ipv6'; then echo '-ipv6'; else echo ''; fi)
 
 					if ${IPSET_BIN} -q test ${IPSET_BASE}${IP6} ${IPAD} || ${IPSET_BIN} -q test ${IPSET_BASE}-nets${IP6} ${IPAD}; then
-						if [ ${DEBUG} -ge 1 ]; then echo "${UUID}${IPSET_BIN##*/} -q test ${IPSET_BASE}(-nets)${IP6} ${IPAD} <- this exists"; fi
+						if [ ${DEBUG} -ge 1 ]; then echo "${UUID}${IPSET_BIN##*/} -q test ${IPSET_BASE}(-nets)${IP6} ${IPAD} <- this exists" >&1; fi
+						let EXISTS_COUNT+=1
 					elif ${IPSET_BIN} -q test ${IPSET_BASE}-excludes${IP6} ${IPAD}; then
-						echo "${UUID}${IPSET_BIN##*/} -q test ${IPSET_BASE}-excludes${IP6} ${IPAD} <- is an excluded IP address"
+						echo "${UUID}${IPSET_BIN##*/} -q test ${IPSET_BASE}-excludes${IP6} ${IPAD} <- is an excluded IP address" >&4
+						let EXCLUDE_COUNT+=1
 					else
 						ASN=$( /usr/bin/whois -h whois.cymru.com " -v ${IPAD}" | tail -1)
 						ASN_COUNTRY=$( echo ${ASN} | awk '{print $7}')
@@ -181,31 +225,58 @@ function loop {
 						declare -i ASN_MASK=$( echo ${ASN_NET} | cut -d'/' -f2)
 
 						if echo ${ASN_COUNTRY} | grep -qE ${WHITELIST}; then
-							echo "${UUID}IP ${IPAD} (${ASN_COMMENT} (${ASN_COUNTRY})) is whitelisted."
-						elif [ ${ASN_MASK} -lt 8 ]; then
-							echo "${UUID}ASN \"${ASN_COMMENT} (${ASN_COUNTRY})\" ${ASN_NET} has a netmask less than 8. For safety reasons, we will not add such large blocks."
-							echo "${UUID}manually run '${IPSET_BIN} add ${IPSET_BASE}-nets${IP6} --exist ${ASN_NET} timeout ${TIMEOUT} comment \"@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})\"' to add it nevertheless." 
+							echo "${UUID}IP ${IPAD} (${ASN_COMMENT} (${ASN_COUNTRY})) is whitelisted." >&4
+							let WHITELIST_COUNT+=1
+						elif [ "${ASN_NET}" != "NA" ] && [ ${ASN_MASK} -lt 8 ]; then
+							echo "${UUID}ASN \"${ASN_COMMENT} (${ASN_COUNTRY})\" ${ASN_NET} has a netmask less than 8. For safety reasons, we will not add such large blocks." >&4 && sleep 0.5
+							echo "${UUID}manually run '${IPSET_BIN} add ${IPSET_BASE}-nets${IP6} --exist ${ASN_NET} timeout ${TIMEOUT} comment \"@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})\"' to add it nevertheless." >&1
+							let SAFETY_COUNT+=1
 						else
 							if echo ${ASN_COUNTRY} | grep -qE ${BLACKLIST}; then
 								if [ "${ASN_NET}" == "NA" ]; then
-									if [ "${IP6}" != '' ]; then ASN_NET="${IPAD}/128"; else ASN_NET="${IPAD}/32"; fi
-									echo "${UUID}could not find an ASN for ${IPAD} (${ASN_COUNTRY}), adding it as ${ASN_NET}"
+									if [ "${IP6}" != '' ]; then ASN_NET="${IPAD}/128"; ASN_MASK=128; else ASN_NET="${IPAD}/32"; ASN_MASK=32; fi
+									echo "${UUID}could not find an ASN for ${IPAD} (${ASN_COUNTRY}), adding it as ${ASN_NET}" >&4
 								fi
-								echo "${UUID}${IPSET_BIN##*/} add ${IPSET_BASE}-nets${IP6} ${ASN_NET} timeout ${TIMEOUT} comment \"@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})\""
+								echo "${UUID}${IPSET_BIN##*/} add ${IPSET_BASE}-nets${IP6} ${ASN_NET} timeout ${TIMEOUT} comment \"@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})\"" >&6
 								${IPSET_BIN} add ${IPSET_BASE}-nets${IP6} --exist ${ASN_NET} timeout ${TIMEOUT} comment "@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})"
+								if [ "${IP6}" != '' ]; then
+									ADDHOSTS=$(( 2 ** ( 64 - ${ASN_MASK} ) ))
+								else
+									ADDHOSTS=$(( 2 ** ( 32 - ${ASN_MASK} ) ))
+								fi
+								let INSERT_COUNT+=1
+								let NEW_HOST_COUNT+=${ADDHOSTS}
 							else
-								echo "${UUID}${IPSET_BIN##*/} add ${IPSET_BASE}${IP6} ${IPAD} timeout ${TIMEOUT} comment \"@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})\""
+								echo "${UUID}${IPSET_BIN##*/} add ${IPSET_BASE}${IP6} ${IPAD} timeout ${TIMEOUT} comment \"@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})\"" >&6
 								${IPSET_BIN} add ${IPSET_BASE}${IP6} --exist ${IPAD} timeout ${TIMEOUT} comment "@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})"
+								let INSERT_COUNT+=1; let NEW_HOST_COUNT+=1
 							fi
 						fi
 					fi
 				fi
 				sleep 1
 			fi
+			dump_stats
 		done <${PIPE}
-		echo 'pipe closed. re-opening'
+		echo 'pipe closed. re-opening' >&4
 	done
 }
 
 setup
+if [ -e ${STATSFILE} ]; then
+	echo "reading volatile stats from ${STATSFILE}" >&6
+	for SETTING in $( grep '=' ${STATSFILE}); do
+		VAR=$( echo ${SETTING} | cut -d'=' -f1)
+		VAL=$( echo ${SETTING} | cut -d'=' -f2 | perl -pne 's/[^\d]*//g')
+		declare -i ${VAR}=${VAL}
+	done
+else
+	declare -i NEW_HOST_COUNT=0
+	declare -i INSERT_COUNT=0
+	declare -i EXCLUDE_COUNT=0
+	declare -i SAFETY_COUNT=0
+	declare -i WHITELIST_COUNT=0
+	declare -i PARSER_ERROR_COUNT=0
+	declare -i EXISTS_COUNT=0
+fi
 loop

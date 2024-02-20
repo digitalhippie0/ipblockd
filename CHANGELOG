@@ -19,16 +19,25 @@
 
 -- ToDo:
 
-[ ]	include documentation from .defaults file into README.md
 [ ]	document tools/*
+[ ]	add a PID file to avoid ipblockd running more than once
 
 -- Wishlist:
 
 [ ]	track down and fix that mysterious bug on IPv6 statistics collection if it ever reappears
-[ ]	logging: add log levels (info, warn, err) if possible
-[ ]	generalize ASN lookups (try: geoip ...)
+[ ]	generalize/minimize ASN lookups (try: geoip ...)
 
 -- Done:
+
+- v1.0.4
+
+[x]	logging: add log levels (info, warn, err) if possible
+	journalctl now shows some pretty coloring :-)
+[x]	add new entries, new hosts and many more counters to statistics output
+[x]	make volatile stats counters persistent
+[-]	include documentation from .defaults file into README.md
+	README.md and INSTALL.md both contain a hint to the documentation within the file itself.
+	this is much easier to maintain.
 
 - v1.0.3
 
