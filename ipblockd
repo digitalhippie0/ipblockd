@@ -32,7 +32,7 @@ RESETSTATS=${RESETSTATS=off}
 declare -i DEBUG=${DEBUG=0}
 
 umask 0077
-MAJOR='1'; MINOR='0'; REVISION='4'
+MAJOR='1'; MINOR='0'; REVISION='5'
 P_UUID=$( cat /proc/sys/kernel/random/uuid)
 IFS='
 '
@@ -53,7 +53,7 @@ function statistics {
 	declare -i VERSION=$( echo $BASH_VERSION | cut -d'.' -f1)
 	if [ ${VERSION} -ge 4 ]; then
 		echo "statistics dump triggered"
-		echo "- blocking stats:" >&6
+		echo "- IPv4 blocking stats:" >&6
 		RAWSTATS=$(	${IPSET_BIN} save ${IPSET_BASE}-nets | perl -pne 's/.*?\/(\d{1,2}).*\((..)\)"$/$1 $2/' | grep -v "${IPSET_BASE}" | sort -k2 | uniq -c
 					${IPSET_BIN} save ${IPSET_BASE} | perl -pne 's/.*?\((..)\)"$/1 32 XYZ/' | grep -v "${IPSET_BASE}" )
 		declare -i TOTALHOSTS=0
@@ -67,15 +67,17 @@ function statistics {
 			STATISTICS[${CC}]=$(( ${STATISTICS[${CC}]} + ${HOST_COUNT} ))
 			TOTALHOSTS=$(( ${TOTALHOSTS} + ${HOST_COUNT} ))
 		done
+		OUTPUT=''
 		for COUNTRY in $( echo ${!STATISTICS[@]} | tr ' ' '\n' | sort); do
 			PERCENTAGE=$( printf '%3.2f' $(echo "scale=2;( ${STATISTICS[${COUNTRY}]} * 100 ) / ${TOTALHOSTS}" | ${BC_BIN} ))
-			echo -n "- blocking" >&6
-			echo -n $( printf '%11d' ${STATISTICS[${COUNTRY}]}) >&6
-			echo -n " (" >&6
-			echo -n $( printf '%5s' ${PERCENTAGE}) >&6
+			OUTPUT+="- blocking"
+			OUTPUT+=$( printf '%11d' ${STATISTICS[${COUNTRY}]})
+			OUTPUT+=" ("
+			OUTPUT+=$( printf '%5s' ${PERCENTAGE})
 			if [ "${COUNTRY}" == "XYZ" ]; then COUNTRY='various other countries'; fi
-			echo "%) hosts from ${COUNTRY}" >&6
+			OUTPUT+=$( echo "%) hosts from ${COUNTRY}\n")
 		done
+		echo -ne "${OUTPUT}" | sort -nr -k3 >&6
 		PERCENTAGE=$( printf '%3.2f' $(echo "scale=2;( ${TOTALHOSTS} * 100 ) / ${THE_INTERNET}" | ${BC_BIN} ))
 		echo "- these are ${TOTALHOSTS} hosts/IPs which represent ${PERCENTAGE}% of the IPv4 internet"
 		echo "- success stats:" >&6
@@ -98,14 +100,17 @@ function statistics {
 				done
 			done
 		done
+		OUTPUT=''
 		for COUNTRY in $( echo ${!STATISTICS[@]} | tr ' ' '\n' | sort); do
 			PERCENTAGE=$( printf '%3.2f' $(echo "scale=2;( ${STATISTICS[${COUNTRY}]} * 100 ) / ${TOTALPACKETS}" | ${BC_BIN} ))
-			echo -n "- counted " >&6
-			echo -n $( printf '%11d' ${STATISTICS[${COUNTRY}]}) >&6
-			echo -n " hits (" >&6
-			echo -n $( printf '%5s' ${PERCENTAGE}) >&6
-			echo "%) from ${COUNTRY}" >&6
+			OUTPUT+="- counted "
+			OUTPUT+=$( printf '%11d' ${STATISTICS[${COUNTRY}]})
+			OUTPUT+=" hits ("
+			OUTPUT+=$( printf '%5s' ${PERCENTAGE})
+			OUTPUT+="%) from ${COUNTRY}\n"
 		done
+		echo -ne "${OUTPUT}" | sort -nr -k3 >&6
+		sleep 0.5
 		echo "- in total there have been ${TOTALPACKETS} hits to the ipsets"
 		echo "- activity stats:" >&6
 		echo "- there have been ${INSERT_COUNT} insertions covering ${NEW_HOST_COUNT} additional hosts" >&6
@@ -183,7 +188,6 @@ function setup {
 			fi
 		done
 	done
-
 }
 
 function loop {
@@ -244,12 +248,12 @@ function loop {
 								else
 									ADDHOSTS=$(( 2 ** ( 32 - ${ASN_MASK} ) ))
 								fi
-								let INSERT_COUNT+=1
+								let INSERT_COUNT+=1; echo -ne '\a'
 								let NEW_HOST_COUNT+=${ADDHOSTS}
 							else
 								echo "${UUID}${IPSET_BIN##*/} add ${IPSET_BASE}${IP6} ${IPAD} timeout ${TIMEOUT} comment \"@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})\"" >&6
 								${IPSET_BIN} add ${IPSET_BASE}${IP6} --exist ${IPAD} timeout ${TIMEOUT} comment "@${TIME} ${ASN_COMMENT} (${ASN_COUNTRY})"
-								let INSERT_COUNT+=1; let NEW_HOST_COUNT+=1
+								let INSERT_COUNT+=1; let NEW_HOST_COUNT+=1; echo -ne '\a'
 							fi
 						fi
 					fi
@@ -263,6 +267,7 @@ function loop {
 }
 
 setup
+
 if [ -e ${STATSFILE} ]; then
 	echo "reading volatile stats from ${STATSFILE}" >&6
 	for SETTING in $( grep '=' ${STATSFILE}); do
@@ -279,4 +284,5 @@ else
 	declare -i PARSER_ERROR_COUNT=0
 	declare -i EXISTS_COUNT=0
 fi
+
 loop
